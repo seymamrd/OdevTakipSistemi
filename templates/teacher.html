@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Öğretmen Paneli</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    .assignment-details ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+    .assignment-details li::before {
+      content: "• ";
+      color: #198754;
+      font-weight: bold;
+    }
+    .assignment-details .text-danger li::before {
+      color: #dc3545;
+    }
+
+    .accordion-button::after {
+      filter: invert(50%);
+    }
+    .accordion-button:not(.collapsed) {
+      background-color: #e7f3ff;
+      color: #0d6efd;
+    }
+    .list-group-item {
+      border: none;
+      padding: 4px 10px;
+    }
+    </style>
+
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="#">👨‍🏫 {{ teacher.name }} - {{ teacher.branch }}</a>
+      <a href="/logout" class="btn btn-outline-light">Çıkış</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <script>
+            Swal.fire({
+              icon: '{{ category }}' === 'success' ? 'success' : 'error',
+              title: '{{ message }}',
+              showConfirmButton: false,
+              timer: 2000
+            });
+          </script>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ✅ Yeni Ödev Yükleme -->
+    <div class="card shadow mb-4">
+      <div class="card-header bg-success text-white">📤 Yeni Ödev Yükle</div>
+      <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+          <div class="row mb-3">
+            <div class="col-md-3">
+              <input type="text" name="title" class="form-control" placeholder="Ödev Başlığı" required>
+            </div>
+            <div class="col-md-3">
+              <input type="text" name="classroom" class="form-control" placeholder="Sınıf (örn: 8/A)" required>
+            </div>
+            <div class="col-md-3">
+              <input type="file" name="file" class="form-control" accept=".pdf,.zip,.rar,.txt" required>
+            </div>
+            <div class="col-md-3">
+                <input type="datetime-local" name="deadline" class="form-control" required>
+            </div>
+
+          </div>
+          <textarea name="description" class="form-control mb-3" rows="3" placeholder="Ödev açıklaması..." required></textarea>
+          <button class="btn btn-success w-100">Yükle</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5>📚 Ödev Listesi</h5>
+        <div class="d-flex gap-2">
+            <select id="classFilter" class="form-select w-auto">
+            <option value="all">Tüm Sınıflar</option>
+            {% for c in class_list %}
+                <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+            </select>
+            <input type="text" id="searchInput" class="form-control" placeholder="Ara (isim, ödev başlığı...)">
+        </div>
+    </div>
+
+
+
+    <!-- 🧾 Öğretmenin Yüklediği Ödevler -->
+    <div class="card shadow mb-4">
+      <div class="card-header bg-dark text-white">📤 Kendi Yüklediği Ödevler</div>
+      <div class="card-body table-responsive">
+        <table class="table table-striped align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Başlık</th>
+              <th>Sınıf</th>
+              <th>Tarih</th>
+              <th>İndir</th>
+              <th>Sil</th>
+              <th>Düzenle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in assignments %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ a.title }}</td>
+              <td>{{ a.classroom }}</td>
+              <td>{{ a.upload_date.strftime("%d.%m.%Y %H:%M") }}
+                <br>
+                <small>
+                📅 Son Teslim: 
+                {% if a.deadline %}
+                    <span class="{{ 'text-danger' if a.deadline < now() else 'text-success' }}">
+                    {{ a.deadline.strftime('%d.%m.%Y %H:%M') }}
+                    </span>
+                {% else %}
+                    Belirtilmemiş
+                {% endif %}
+                </small>
+              </td>
+              <td><a href="{{ url_for('download_file', filename=a.filename) }}" class="btn btn-sm btn-primary">İndir</a></td>
+              <td><a href="{{ url_for('delete_assignment', assignment_id=a.id) }}" class="btn btn-sm btn-danger" onclick="return confirmDelete(event, '{{ a.title }}')">Sil</a></td>
+              <td><a href="{{ url_for('edit_assignment', assignment_id=a.id) }}" class="btn btn-sm btn-warning">Düzenle</a></td>
+              <tr>
+                <td colspan="7" class="p-0">
+                  <div class="accordion accordion-flush" id="accordion-{{ a.id }}">
+                    <div class="accordion-item">
+                      <h2 class="accordion-header" id="heading-{{ a.id }}">
+                        <button class="accordion-button collapsed bg-light" type="button" data-bs-toggle="collapse" 
+                                data-bs-target="#collapse-{{ a.id }}" aria-expanded="false" aria-controls="collapse-{{ a.id }}">
+                          👁️ Detayları Gör
+                        </button>
+                      </h2>
+                      <div id="collapse-{{ a.id }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ a.id }}" data-bs-parent="#accordion-{{ a.id }}">
+                        <div class="accordion-body">
+                          <div class="row">
+                            <div class="col-md-6">
+                              <h6 class="fw-bold text-success">✅ Teslim Eden Öğrenciler</h6>
+                              {% if a.submitted_students %}
+                                <ul class="list-group list-group-flush">
+                                  {% for s in a.submitted_students %}
+                                    <li class="list-group-item">{{ s.name }}</li>
+                                  {% endfor %}
+                                </ul>
+                              {% else %}
+                                <p class="text-muted">Henüz kimse teslim etmedi.</p>
+                              {% endif %}
+                            </div>
+
+                            <div class="col-md-6">
+                              <h6 class="fw-bold text-danger">❌ Teslim Etmeyen Öğrenciler</h6>
+                              {% if a.missing_students %}
+                                <ul class="list-group list-group-flush">
+                                  {% for s in a.missing_students %}
+                                    <li class="list-group-item">{{ s.name }}</li>
+                                  {% endfor %}
+                                </ul>
+                              {% else %}
+                                <p class="text-muted">Tüm öğrenciler teslim etti 👏</p>
+                              {% endif %}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+
+              
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted">Henüz ödev yüklenmemiş.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 🧩 Öğrencilerin Yüklediği Ödevler -->
+    <div class="card shadow mt-4">
+      <div class="card-header bg-info text-white">📥 Öğrencilerin Yüklediği Ödevler</div>
+      <div class="card-body table-responsive">
+        {% if submissions %}
+        <table class="table table-hover align-middle">
+          <thead class="table-info">
+            <tr>
+              <th>#</th>
+              <th>Öğrenci Adı</th>
+              <th>Sınıf</th>
+              <th>Ödev Başlığı</th>
+              <th>Dosya</th>
+              <th>Tarih</th>
+              <th>İndir</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in submissions %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ s.student_name }}</td>
+              <td>{{ s.classroom }}</td>
+              <td>{{ s.assignment_title }}</td>
+              <td>{{ s.filename }}</td>
+              <td>{{ s.upload_date.strftime('%d.%m.%Y %H:%M') }}</td>
+              <td><a href="{{ url_for('download_file', filename=s.filename) }}" class="btn btn-success btn-sm">İndir</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+          <div class="alert alert-secondary text-center">Henüz hiçbir öğrenci ödev yüklemedi.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ Scriptler -->
+   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    function confirmDelete(event, title) {
+      event.preventDefault();
+      const url = event.currentTarget.getAttribute('href');
+      Swal.fire({
+        title: `"${title}" silinsin mi?`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Evet, sil",
+        cancelButtonText: "Vazgeç"
+      }).then((result) => {
+        if (result.isConfirmed) {
+          window.location.href = url;
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+    const classFilter = document.getElementById('classFilter');
+    const searchInput = document.getElementById('searchInput');
+    const allRows = document.querySelectorAll('tbody tr');
+
+    function filterRows() {
+        const selectedClass = classFilter.value.toLowerCase();
+        const searchTerm = searchInput.value.toLowerCase();
+
+        allRows.forEach(row => {
+            const cells = Array.from(row.cells).map(cell => cell.textContent.toLowerCase());
+            const classCell = row.cells[2]?.textContent.toLowerCase();
+            const matchesClass = selectedClass === 'all' || classCell === selectedClass;
+            const matchesSearch = cells.some(text => text.includes(searchTerm));
+            row.style.display = (matchesClass && matchesSearch) ? '' : 'none';
+        });
+        }
+
+        classFilter.addEventListener('change', filterRows);
+        searchInput.addEventListener('input', filterRows);
+    });
+
+    // 🔹 Sınıf filtresi
+    document.addEventListener('DOMContentLoaded', function () {
+      const classFilter = document.getElementById('classFilter');
+      const allRows = document.querySelectorAll('tbody tr');
+      classFilter.addEventListener('change', () => {
+        const selected = classFilter.value;
+        allRows.forEach(row => {
+          const classCell = row.cells[2]?.textContent.trim();
+          row.style.display = (selected === 'all' || classCell === selected) ? '' : 'none';
+        });
+      });
+    });
+  </script>
+  <script>
+  function toggleDetails(id) {
+    const row = document.getElementById('details-' + id);
+    row.style.display = row.style.display === 'none' ? '' : 'none';
+  }
+</script>
+</body>
+</html>

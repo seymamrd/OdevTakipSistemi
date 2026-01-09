@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Öğrenci Paneli</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container-fluid">
+    <span class="navbar-brand">Öğrenci Paneli</span>
+    <div class="d-flex">
+      <a href="/logout" class="btn btn-outline-light">Çıkış Yap</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-4">
+    <h3 class="text-center mb-4">Sınıfınıza Ait Ödevler</h3>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if assignments %}
+      {% for assignment in assignments %}
+      <div class="card mb-3 shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">{{ assignment.title }}</h5>
+          <h6 class="text-muted">{{ assignment.branch }} - {{ assignment.teacher_name }}</h6>
+          <p class="card-text">{{ assignment.description }}</p>
+
+          <p>
+            📅 Son Teslim: 
+            {% if assignment.deadline %}
+              <span class="{{ 'text-danger' if assignment.deadline < now() else 'text-success' }}">
+                {{ assignment.deadline.strftime('%d.%m.%Y %H:%M') }}
+              </span>
+            {% else %}
+              Belirtilmemiş
+            {% endif %}
+          </p>
+
+          <a href="{{ url_for('download_file', filename=assignment.filename) }}" class="btn btn-success btn-sm">
+            📥 Ödevi İndir
+          </a>
+          {% if assignment.deadline and assignment.deadline < now() %}
+            <!-- Teslim süresi doldu -->
+            <div class="mt-3">
+              <p class="text-danger fw-bold">⚠️ Teslim süresi doldu. Artık ödev yüklenemez veya düzenlenemez.</p>
+            </div>
+          {% else %}
+            {% if assignment.submitted_file %}
+              <!-- Ödev teslim edilmişse göster -->
+              <div class="mt-3">
+                <p class="text-success mb-1">✅ Ödev teslim edildi</p>
+                <p class="text-muted">
+                  📄 {{ assignment.submitted_file }} 
+                  ({{ assignment.submitted_date.strftime('%d.%m.%Y %H:%M') }})
+                </p>
+
+                <!-- Yeniden yükleme (sadece süre dolmamışsa izin veriyoruz zaten) -->
+                <form action="/student" method="POST" enctype="multipart/form-data">
+                  <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
+                  <input type="file" name="file" class="form-control mb-2" accept=".pdf,.zip,.rar,.txt,.jpg,.jpeg,.png,.webp" required>
+                  <button type="submit" class="btn btn-warning btn-sm">✏️ Ödev Güncelle</button>
+                </form>
+              </div>
+            {% else %}
+              <!-- İlk kez yükleme -->
+              <form action="/student" method="POST" enctype="multipart/form-data" class="mt-3">
+                <input type="hidden" name="assignment_id" value="{{ assignment.id }}">
+                <input type="file" name="file" class="form-control mb-2" accept=".pdf,.zip,.rar,.txt,.jpg,.jpeg,.png,.webp" required>
+                <button type="submit" class="btn btn-primary btn-sm">📤 Ödevimi Yükle</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info text-center">
+        Şu anda sınıfınıza ait bir ödev bulunmamaktadır.
+      </div>
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
