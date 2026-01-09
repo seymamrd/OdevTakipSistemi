@@ -14,7 +14,7 @@ Kullanılan Teknolojiler
 
 Flask
 
-SQLite
+MySql
 
 Bootstrap 5
 
